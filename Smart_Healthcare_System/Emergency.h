@@ -4,7 +4,7 @@
 #include "Config.h"
 #include "MAX30102_Module.h"
 #include "PulseSensor_Module.h"
-#include "MLX90614_Module.h"
+#include "DS18B20_Module.h"
 #include "ECG_Module.h"
 #include "GPS_Module.h"
 #include "GSM_Module.h"

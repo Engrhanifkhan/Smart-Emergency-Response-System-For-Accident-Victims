@@ -30,6 +30,7 @@ private:
   unsigned long _lastSampleMs;
   long          _baselineSum;
   int           _baselineCount;
+  float         _filterState;
 
   int readAnalogSample();
   int applyLowPassFilter(int sample);

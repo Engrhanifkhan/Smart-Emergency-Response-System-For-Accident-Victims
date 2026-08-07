@@ -4,9 +4,8 @@
 #include "Config.h"
 
 // ---------------------------------------------------------------------------
-// Pulse Sensor Module
-// Reads analog PPG signal from a pulse sensor on A1.
-// Computes BPM via peak detection on the filtered waveform.
+// PulseSensor Amped — analog PPG on ESP32 ADC (GPIO 34)
+// Adaptive baseline peak detection (works with varying ADC levels)
 // ---------------------------------------------------------------------------
 
 struct PulseSensorData {
@@ -28,12 +27,16 @@ private:
   PulseSensorData _data;
   unsigned long   _lastSampleMs;
   unsigned long   _lastBeatMs;
+  float           _baseline;
   int             _peakThreshold;
   bool            _beatInProgress;
+  int             _sampleMin;
+  int             _sampleMax;
+  unsigned long   _windowStartMs;
 
   int  readSample();
-  int  filterSample(int sample);
   void detectBeat(int sample);
+  void updateFingerWindow(int sample);
 };
 
 extern PulseSensorModule pulseSensor;

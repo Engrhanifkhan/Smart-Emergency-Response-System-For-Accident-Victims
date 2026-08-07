@@ -1,0 +1,19 @@
+# Arduino / build
+build/
+*.hex
+*.elf
+*.bin
+*.map
+
+# IDE / OS
+.vscode/
+.idea/
+*.code-workspace
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Secrets / local
+.env
+*.pem
+*.key

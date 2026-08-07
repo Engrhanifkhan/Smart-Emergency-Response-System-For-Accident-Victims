@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 // MAX30102 Module
 // Pulse oximeter: heart rate (BPM) and SpO2 (%).
-// Uses I2C Bus 1 (Wire) — separate SDA/SCL from MLX90614.
+// Uses I2C Bus 1 (Wire) — SDA/SCL for MAX30102 only.
 // ---------------------------------------------------------------------------
 
 struct MAX30102Data {

@@ -57,16 +57,16 @@ void EmergencyHandler::triggerManualEmergency() {
 EmergencyLevel EmergencyHandler::evaluateVitals() {
   const MAX30102Data    &pulseOx = max30102.getData();
   const PulseSensorData &pulse   = pulseSensor.getData();
-  const MLX90614Data    &temp    = mlx90614.getData();
+  const DS18B20Data     &temp    = ds18b20.getData();
   const ECGData         &ecg     = ecgModule.getData();
 
-  if (temp.objectTemperatureC >= TEMP_HIGH_THRESHOLD_C) {
+  if (temp.temperatureC >= TEMP_HIGH_THRESHOLD_C) {
     strncpy(_status.reason, "High body temperature", sizeof(_status.reason) - 1);
     return EMERGENCY_CRITICAL;
   }
 
-  if (temp.objectTemperatureC > 0.0f &&
-      temp.objectTemperatureC <= TEMP_LOW_THRESHOLD_C) {
+  if (temp.temperatureC > 0.0f &&
+      temp.temperatureC <= TEMP_LOW_THRESHOLD_C) {
     strncpy(_status.reason, "Low body temperature", sizeof(_status.reason) - 1);
     return EMERGENCY_WARNING;
   }
@@ -146,7 +146,7 @@ void EmergencyHandler::buildVitalsMessage(char *buffer, size_t bufferSize,
                                           const char *prefix, const char *reason) {
   const MAX30102Data    &pulseOx = max30102.getData();
   const PulseSensorData &pulse   = pulseSensor.getData();
-  const MLX90614Data    &temp    = mlx90614.getData();
+  const DS18B20Data     &temp    = ds18b20.getData();
   const ECGData         &ecg     = ecgModule.getData();
   const GPSData         &gps     = gpsModule.getData();
 
@@ -157,15 +157,17 @@ void EmergencyHandler::buildVitalsMessage(char *buffer, size_t bufferSize,
   if (reason != NULL && reason[0] != '\0') {
     if (gps.fixValid) {
       snprintf(buffer, bufferSize,
-               "%s:%s T:%.1f HR:%d P:%d SpO2:%d ECG:%d Loc:%.5f,%.5f",
+               "%s:%s T:%.1fC/%.1fF HR:%d P:%d SpO2:%d ECG:%d Loc:%.5f,%.5f",
                prefix, reason,
-               temp.objectTemperatureC, hr, hrPulse, pulseOx.spo2Percent,
+               temp.temperatureC, C_TO_F(temp.temperatureC),
+               hr, hrPulse, pulseOx.spo2Percent,
                ecg.filteredValue, gps.latitude, gps.longitude);
     } else {
       snprintf(buffer, bufferSize,
-               "%s:%s T:%.1f HR:%d P:%d SpO2:%d ECG:%d Loc:N/A",
+               "%s:%s T:%.1fC/%.1fF HR:%d P:%d SpO2:%d ECG:%d Loc:N/A",
                prefix, reason,
-               temp.objectTemperatureC, hr, hrPulse, pulseOx.spo2Percent,
+               temp.temperatureC, C_TO_F(temp.temperatureC),
+               hr, hrPulse, pulseOx.spo2Percent,
                ecg.filteredValue);
     }
     return;
@@ -173,15 +175,17 @@ void EmergencyHandler::buildVitalsMessage(char *buffer, size_t bufferSize,
 
   if (gps.fixValid) {
     snprintf(buffer, bufferSize,
-             "%s T:%.1f HR:%d P:%d SpO2:%d ECG:%d Loc:%.5f,%.5f",
+             "%s T:%.1fC/%.1fF HR:%d P:%d SpO2:%d ECG:%d Loc:%.5f,%.5f",
              prefix,
-             temp.objectTemperatureC, hr, hrPulse, pulseOx.spo2Percent,
+             temp.temperatureC, C_TO_F(temp.temperatureC),
+             hr, hrPulse, pulseOx.spo2Percent,
              ecg.filteredValue, gps.latitude, gps.longitude);
   } else {
     snprintf(buffer, bufferSize,
-             "%s T:%.1f HR:%d P:%d SpO2:%d ECG:%d Loc:N/A",
+             "%s T:%.1fC/%.1fF HR:%d P:%d SpO2:%d ECG:%d Loc:N/A",
              prefix,
-             temp.objectTemperatureC, hr, hrPulse, pulseOx.spo2Percent,
+             temp.temperatureC, C_TO_F(temp.temperatureC),
+             hr, hrPulse, pulseOx.spo2Percent,
              ecg.filteredValue);
   }
 }

@@ -1,4 +1,6 @@
 #include "GSM_Module.h"
+#include <string.h>
+#include <ctype.h>
 
 GSMModule gsmModule;
 
@@ -16,13 +18,13 @@ bool GSMModule::init() {
     return false;
   }
 
-  sendATCommand("ATE0", "OK", 2000);   // Disable echo
-  sendATCommand("AT+CMGF=1", "OK", 2000); // SMS text mode
-  sendATCommand("AT+CNMI=1,2,0,0,0", "OK", 2000);
+  sendATCommand("ATE0", "OK", 2000);
+  sendATCommand("AT+CMGF=1", "OK", 2000);          // text mode
+  sendATCommand("AT+CNMI=2,2,0,0,0", "OK", 2000);  // new SMS direct to UART
 
   _data.networkState = GSM_STATE_INIT;
   _data.moduleReady  = true;
-  DEBUG_PRINTLN(F("[GSM] Module initialized."));
+  DEBUG_PRINTLN(F("[GSM] Module initialized (SMS RX enabled)."));
   return true;
 }
 
@@ -32,6 +34,7 @@ void GSMModule::update() {
   }
 
   processIncoming();
+  parseIncomingSmsBuffer();
 
   const unsigned long now = millis();
   if ((now - _lastHeartbeatMs) < GSM_HEARTBEAT_INTERVAL_MS) {
@@ -57,6 +60,9 @@ void GSMModule::clear() {
   _data.lastSmsSuccess = false;
   _lastHeartbeatMs     = 0;
   _rxBuffer            = "";
+  _lastSender[0]       = '\0';
+  _lastBody[0]         = '\0';
+  _smsPending          = false;
 }
 
 bool GSMModule::sendSMS(const char *phoneNumber, const char *message) {
@@ -72,7 +78,6 @@ bool GSMModule::sendSMS(const char *phoneNumber, const char *message) {
   GSM_SERIAL.print(phoneNumber);
   GSM_SERIAL.println(F("\""));
 
-  // Wait for ">" prompt before sending message body
   unsigned long start = millis();
   bool gotPrompt = false;
   while ((millis() - start) < 10000UL) {
@@ -90,7 +95,7 @@ bool GSMModule::sendSMS(const char *phoneNumber, const char *message) {
   }
 
   GSM_SERIAL.print(message);
-  GSM_SERIAL.write(26); // Ctrl+Z to send
+  GSM_SERIAL.write(26);
 
   _rxBuffer = "";
   start = millis();
@@ -111,6 +116,28 @@ bool GSMModule::sendSMS(const char *phoneNumber, const char *message) {
 
   DEBUG_PRINTLN(success ? F("[GSM] SMS sent.") : F("[GSM] SMS failed."));
   return success;
+}
+
+bool GSMModule::pollIncomingSms(char *senderOut, size_t senderLen,
+                                char *bodyOut, size_t bodyLen) {
+  processIncoming();
+  parseIncomingSmsBuffer();
+
+  if (!_smsPending) {
+    return false;
+  }
+
+  if (senderOut != NULL && senderLen > 0) {
+    strncpy(senderOut, _lastSender, senderLen - 1);
+    senderOut[senderLen - 1] = '\0';
+  }
+  if (bodyOut != NULL && bodyLen > 0) {
+    strncpy(bodyOut, _lastBody, bodyLen - 1);
+    bodyOut[bodyLen - 1] = '\0';
+  }
+
+  _smsPending = false;
+  return true;
 }
 
 const GSMData &GSMModule::getData() const {
@@ -138,9 +165,68 @@ void GSMModule::processIncoming() {
   while (GSM_SERIAL.available() > 0) {
     const char c = (char)GSM_SERIAL.read();
     _rxBuffer += c;
-    if (_rxBuffer.length() > 256) {
-      _rxBuffer.remove(0, _rxBuffer.length() - 256);
+    if (_rxBuffer.length() > 512) {
+      _rxBuffer.remove(0, _rxBuffer.length() - 512);
     }
+  }
+}
+
+void GSMModule::parseIncomingSmsBuffer() {
+  // Format with CNMI=2,2,0,0,0:
+  // +CMT: "+92300...","","yy/mm/dd,hh:mm:ss+zz"
+  // STATUS
+  int idx = _rxBuffer.indexOf("+CMT:");
+  if (idx < 0) {
+    return;
+  }
+
+  int lineEnd = _rxBuffer.indexOf('\n', idx);
+  if (lineEnd < 0) {
+    return; // wait for full header line
+  }
+
+  // Extract sender between first quotes
+  int q1 = _rxBuffer.indexOf('"', idx);
+  int q2 = (q1 >= 0) ? _rxBuffer.indexOf('"', q1 + 1) : -1;
+  if (q1 >= 0 && q2 > q1) {
+    String sender = _rxBuffer.substring(q1 + 1, q2);
+    sender.toCharArray(_lastSender, sizeof(_lastSender));
+  } else {
+    _lastSender[0] = '\0';
+  }
+
+  // Body is the next line after header
+  int bodyStart = lineEnd + 1;
+  if (bodyStart >= (int)_rxBuffer.length()) {
+    return; // wait for body
+  }
+
+  int bodyEnd = _rxBuffer.indexOf('\n', bodyStart);
+  if (bodyEnd < 0) {
+    // Accept if we already have some body text ending soon
+    if ((millis() % 50) != 0) {
+      // keep waiting a bit — use timeout by checking CR-only
+    }
+    bodyEnd = _rxBuffer.indexOf('\r', bodyStart);
+    if (bodyEnd < 0 && (_rxBuffer.length() - bodyStart) < 2) {
+      return;
+    }
+    if (bodyEnd < 0) {
+      bodyEnd = _rxBuffer.length();
+    }
+  }
+
+  String body = _rxBuffer.substring(bodyStart, bodyEnd);
+  body.trim();
+  body.toCharArray(_lastBody, sizeof(_lastBody));
+
+  // Consume parsed SMS from buffer
+  _rxBuffer.remove(0, bodyEnd > 0 ? bodyEnd : (_rxBuffer.length()));
+
+  if (_lastBody[0] != '\0') {
+    _smsPending = true;
+    DEBUG_PRINT(F("[GSM] Incoming SMS: "));
+    DEBUG_PRINTLN(_lastBody);
   }
 }
 

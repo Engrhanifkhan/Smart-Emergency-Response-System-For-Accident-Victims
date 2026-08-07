@@ -10,7 +10,8 @@
 //
 //  Module            Mega 2560          ESP32-WROOM
 //  ────────────────  ─────────────────  ──────────────────────────────
-//  TFT CS            D10                GPIO 5   (your working LCD)
+//  TFT HX8357D       480x320 landscape  (MADCTL 0xE8 mirror fix)
+//  TFT CS            D10                GPIO 5   (confirmed working)
 //  TFT DC            D8                 GPIO 2
 //  TFT RST           D9                 GPIO 4
 //  TFT MOSI (SDI)    D51                GPIO 23
@@ -21,8 +22,7 @@
 //  MAX30102 SCL      D21 (I2C1)         GPIO 22  Wire
 //  MAX30102 INT      D2                 GPIO 27
 //
-//  MLX90614 SDA      D20 shared Mega    GPIO 25  Wire1 (I2C Bus 2)
-//  MLX90614 SCL      D21 shared Mega    GPIO 26  Wire1
+//  DS18B20 (temp)    OneWire             GPIO 25  (+ 4.7k to 3.3V)
 //
 //  Pulse Sensor      A1                 GPIO 34
 //  ECG AOUT          A0                 GPIO 35
@@ -39,37 +39,33 @@
 //  TFT keeps your tested CS=5 DC=2 RST=4. GSM moved off SPI pins.
 // ===========================================================================
 
-// --- Full system enable (ESP32-WROOM-32: ALL modules ON) -------------------
+// --- Module enables (use 1/0 only — ESP32 #if does NOT accept true/false) ---
 #ifdef ESP32
-  #define LCD_TEST_ONLY             false
-  #define ENABLE_TFT_MODULE         true
-  #define ENABLE_GSM_MODULE         true
-  #define ENABLE_GPS_MODULE         true
-  #define ENABLE_I2C_SENSORS        true
-  #define ENABLE_ANALOG_SENSORS     true
-  #define ENABLE_EMERGENCY_MODULE   true
+  // 0 = full system (display always on; sensors optional)
+  #define LCD_TEST_ONLY             0
+  #define ENABLE_TFT_MODULE         1
+  #define ENABLE_GSM_MODULE         1
+  #define ENABLE_GPS_MODULE         1
+  #define ENABLE_I2C_SENSORS        1
+  #define ENABLE_ANALOG_SENSORS     1
+  #define ENABLE_EMERGENCY_MODULE   1
 #else
-  #define LCD_TEST_ONLY             true
-  #define ENABLE_TFT_MODULE         true
-  #define ENABLE_GSM_MODULE         false
-  #define ENABLE_GPS_MODULE         false
-  #define ENABLE_I2C_SENSORS        true
-  #define ENABLE_ANALOG_SENSORS     true
-  #define ENABLE_EMERGENCY_MODULE   true
+  #define LCD_TEST_ONLY             0
+  #define ENABLE_TFT_MODULE         1
+  #define ENABLE_GSM_MODULE         0
+  #define ENABLE_GPS_MODULE         0
+  #define ENABLE_I2C_SENSORS        1
+  #define ENABLE_ANALOG_SENSORS     1
+  #define ENABLE_EMERGENCY_MODULE   1
 #endif
 
 // ADC mid-scale: Mega 10-bit (~512), ESP32 12-bit (~2048)
 #ifdef ESP32
   #define ADC_MID_SCALE             2048
-  #define PULSE_PEAK_THRESHOLD      2200
-  #define PULSE_FINGER_MIN          2100
-  #define PULSE_FINGER_MAX          4000
 #else
   #define ADC_MID_SCALE             512
-  #define PULSE_PEAK_THRESHOLD      550
-  #define PULSE_FINGER_MIN          530
-  #define PULSE_FINGER_MAX          1000
 #endif
+// PulseSensor Amped uses adaptive baseline (no fixed finger min/max)
 
 // --- System Timing Constants -----------------------------------------------
 #define SYSTEM_UPDATE_INTERVAL_MS   20U    // Faster loop for smooth live ECG graph
@@ -88,17 +84,16 @@
 #define TFT_MOSI_PIN                23
 #define TFT_SCK_PIN                 18
 #define TFT_MISO_PIN                19
-#define TFT_MIRROR_FIX              true
-#define TFT_MADCTL_VALUE            0x88
+#define TFT_MIRROR_FIX              1
+#define TFT_MADCTL_VALUE            0xE8   // confirmed on HX8357D
 
 // I2C Bus 1 — MAX30102 (Wire)  — same role as Mega D20/D21
 #define I2C1_SDA_PIN                21
 #define I2C1_SCL_PIN                22
 #define MAX30102_INT_PIN            27
 
-// I2C Bus 2 — MLX90614 (Wire1) — separate bus (Mega shared one I2C)
-#define I2C2_SDA_PIN                25
-#define I2C2_SCL_PIN                26
+// DS18B20 body temperature (OneWire) — was MLX90614 I2C pin 25
+#define DS18B20_PIN                 25
 
 // Analog sensors — same roles as Mega A1 / A0 / D11 / D12
 #define PULSE_SENSOR_PIN            34
@@ -127,15 +122,14 @@
 #define TFT_SCK_PIN                 52
 #define TFT_MISO_PIN                50
 #define TFT_SPI_SS_PIN              53
-#define TFT_MIRROR_FIX              true
-#define TFT_MADCTL_VALUE            0x88
+#define TFT_MIRROR_FIX              1
+#define TFT_MADCTL_VALUE            0xE8
 
 #define I2C1_SDA_PIN                20
 #define I2C1_SCL_PIN                21
 #define MAX30102_INT_PIN            2
 
-#define I2C2_SDA_PIN                12
-#define I2C2_SCL_PIN                13
+#define DS18B20_PIN                 4      // OneWire data (Mega)
 
 #define PULSE_SENSOR_PIN            A1
 #define ECG_ANALOG_PIN              A0
@@ -155,7 +149,6 @@
 #endif
 
 #define I2C_MAX30102_ADDRESS        0x57
-#define I2C_MLX90614_ADDRESS        0x5A
 #define PULSE_SAMPLE_RATE_HZ        100
 #define ECG_SAMPLE_RATE_HZ          100
 #define ECG_BASELINE_SAMPLES        50
@@ -166,24 +159,56 @@
 #define EMERGENCY_COOLDOWN_MS       60000UL
 #define HEALTH_REPORT_SMS_INTERVAL_MS 120000UL
 
-// --- Health Warning Thresholds ---------------------------------------------
-#define TEMP_HIGH_THRESHOLD_C       38.5f
-#define TEMP_LOW_THRESHOLD_C        35.0f
-#define HR_HIGH_THRESHOLD_BPM       120
-#define HR_LOW_THRESHOLD_BPM        50
-#define SPO2_LOW_THRESHOLD_PCT      90
+// --- Remote status commands (Serial Monitor + GSM SMS) ---------------------
+// Type in Serial: STATUS | DATA | CHECK | ALL | INFO | HELP
+// SMS same words to the SIM → reply SMS with all sensor/GPS/GSM data
+#define ENABLE_COMMAND_MODULE       1
+
+// --- Human body monitoring ranges (shown on LCD) ---------------------------
+// DS18B20 body temperature
+#define TEMP_MIN_C                  35.0f   // hypothermia alert below
+#define TEMP_MAX_C                  38.5f   // fever alert above
+#define TEMP_NORMAL_MIN_C           36.1f
+#define TEMP_NORMAL_MAX_C           37.2f
+#define C_TO_F(c)                   (((c) * 9.0f / 5.0f) + 32.0f)
+
+// MAX30102 SpO2 %
+#define SPO2_MIN_PCT                95      // normal low
+#define SPO2_MAX_PCT                100     // normal high
+#define SPO2_LOW_THRESHOLD_PCT      90      // critical alert below
+
+// PulseSensor Amped / MAX30102 heart rate (bpm)
+#define PULSE_MIN_BPM               60      // normal adult low
+#define PULSE_MAX_BPM               100     // normal adult high
+#define HR_LOW_THRESHOLD_BPM        50      // bradycardia alert
+#define HR_HIGH_THRESHOLD_BPM       120     // tachycardia alert
+
+// AD8232 ECG — adult rate band + ADC plot window around baseline
+#define ECG_MIN_BPM                 60
+#define ECG_MAX_BPM                 100
+#define ECG_ADC_SPAN                400     // ±span ADC counts on graph
+
+// Legacy aliases used by Emergency module
+#define TEMP_HIGH_THRESHOLD_C       TEMP_MAX_C
+#define TEMP_LOW_THRESHOLD_C        TEMP_MIN_C
+
+// Project name (boot splash)
+#define PROJECT_NAME_LINE1          "Smart Emergency Response System"
+#define PROJECT_NAME_LINE2          "For Accident Victims"
+#define PROJECT_NAME_LINE3          "Vital Sign Monitoring"
+#define PROJECT_NAME_LINE4          "And Data Transmission"
 
 // --- Debugging via USB Serial ----------------------------------------------
 #define DEBUG_SERIAL                Serial
 #define DEBUG_BAUD_RATE             115200
-#define ENABLE_DEBUG                true
+#define ENABLE_DEBUG                1
 
 #if ENABLE_DEBUG
-  #define DEBUG_PRINT(x)            DEBUG_SERIAL.print(x)
-  #define DEBUG_PRINTLN(x)          DEBUG_SERIAL.println(x)
+  #define DEBUG_PRINT(...)            DEBUG_SERIAL.print(__VA_ARGS__)
+  #define DEBUG_PRINTLN(...)          DEBUG_SERIAL.println(__VA_ARGS__)
 #else
-  #define DEBUG_PRINT(x)
-  #define DEBUG_PRINTLN(x)
+  #define DEBUG_PRINT(...)
+  #define DEBUG_PRINTLN(...)
 #endif
 
 #endif // CONFIG_H

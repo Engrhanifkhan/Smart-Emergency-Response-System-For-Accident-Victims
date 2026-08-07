@@ -4,10 +4,7 @@
 #include "Config.h"
 
 // ---------------------------------------------------------------------------
-// GSM Module
-// Controls a SIM800L (or compatible) modem via AT commands on Serial1
-// (RX1=D19, TX1=D18). Use an external 4.0V supply for SIM800L VCC.
-// Supports SMS alerts and network readiness checks.
+// GSM Module — SIM800L AT commands + SMS send/receive
 // ---------------------------------------------------------------------------
 
 enum GSMNetworkState {
@@ -31,6 +28,9 @@ public:
   void clear();
 
   bool sendSMS(const char *phoneNumber, const char *message);
+  // Returns true once when a new SMS body is available (command check)
+  bool pollIncomingSms(char *senderOut, size_t senderLen,
+                       char *bodyOut, size_t bodyLen);
   const GSMData &getData() const;
 
 private:
@@ -38,9 +38,14 @@ private:
   unsigned long _lastHeartbeatMs;
   String        _rxBuffer;
 
+  char _lastSender[24];
+  char _lastBody[96];
+  bool _smsPending;
+
   bool sendATCommand(const char *command, const char *expected, uint16_t timeoutMs);
   void processIncoming();
   void checkSignalStrength();
+  void parseIncomingSmsBuffer();
 };
 
 extern GSMModule gsmModule;

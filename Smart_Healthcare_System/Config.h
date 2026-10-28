@@ -155,7 +155,7 @@
 #define ECG_FILTER_ALPHA            0.35f
 
 // --- Emergency SMS Settings ------------------------------------------------
-#define EMERGENCY_PHONE_NUMBER      "+923118221686"
+#define EMERGENCY_PHONE_NUMBER      "+923159915537"
 #define EMERGENCY_COOLDOWN_MS       60000UL
 #define HEALTH_REPORT_SMS_INTERVAL_MS 120000UL
 

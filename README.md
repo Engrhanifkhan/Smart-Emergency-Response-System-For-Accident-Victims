@@ -11,8 +11,8 @@ Professional **ESP32-WROOM** embedded healthcare monitoring platform for acciden
 |---|---|
 | **Name** | Engr. **Hanif Khan** |
 | **Title** | Embedded Systems Engineer |
-| **Contact** | **0311-8221686** |
-| **WhatsApp / Call** | +92 311 8221686 |
+| **Contact** | **0315-9915537** |
+| **WhatsApp / Call** | +92 315 9915537 |
 
 ---
 
@@ -91,7 +91,7 @@ This project implements a portable smart emergency response unit that can be use
 
 ## Emergency SMS
 
-Alert / report number configured in firmware: **+92 311 8221686** (Engr. Hanif Khan).
+Alert / report number configured in firmware: **+92 315 9915537** (Engr. Hanif Khan).
 
 ---
 
@@ -122,4 +122,4 @@ smart_heath_monitoring/
 Developed for academic / emergency-response demonstration use.
 
 **Engr. Hanif Khan** — Embedded Systems Engineer  
-Phone / WhatsApp: **0311-8221686**
+Phone / WhatsApp: **0315-9915537**
